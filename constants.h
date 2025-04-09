@@ -40,24 +40,11 @@ typedef enum
   COMMAND_TURN_RIGHT = 3,
   COMMAND_STOP = 4,
   COMMAND_GET_STATS = 5,
-  COMMAND_CLEAR_STATS = 6
+  COMMAND_CLEAR_STATS = 6,
+  COMMAND_OPEN = 7,
+  COMMAND_CLOSE = 8,
+  COMMAND_COLOUR = 9,
+  COMMAND_DELIVER = 10
 } TCommandType;
-
-typedef enum 
-{
-  FORWARD = 1,
-  BACKWARD = 2,
-  LEFT = 3,
-  RIGHT = 4
-} TDirection;
-
-typedef enum Tdir
-{
-  STOP,
-  GO,
-  BACK,
-  CCW,
-  CW
-} Tdir;
-
 #endif
+
