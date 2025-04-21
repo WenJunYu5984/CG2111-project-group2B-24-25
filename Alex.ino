@@ -1,8 +1,10 @@
+
 #include <serialize.h>
 
 #include "packet.h"
 #include "constants.h"
 #include <stdarg.h>
+
 
 /*
  * Alex's configuration constants
@@ -23,8 +25,14 @@ volatile TDirection dir;
 #define ALEX_LENGTH 25.5
 #define ALEX_BREADTH 15.8
 
+#define ULTRASONIC_TRIG (1 << 1)
+#define ULTRASONIC_ECHO (1 << PD0)
+
 float alexDiagonal = 29.998;
 float alexCirc = 94.242;
+
+bool ultraSensing = false;
+volatile long sonicDist = 0;
 
 // Store the ticks from Alex's left and
 // right encoders.
@@ -78,7 +86,7 @@ void right(float ang, float speed) {
   }
   targetTicks = rightReverseTicksTurns + deltaTicks;
   
-  cw(ang,speed);
+  cw(ang,100);
 }
 
 /*
@@ -146,8 +154,7 @@ void dbprintf(const char* format, ...) {
   char buffer[128];
   va_start(args,format);
   vsprintf(buffer,format,args);
-  Serial.println(buffer);
-  //sendMessage(buffer);
+  sendMessage(buffer);
 }
 
 void sendBadPacket()
@@ -291,10 +298,24 @@ ISR(INT3_vect) {
   leftISR();
 }
 
+/*ISR(INT0_vect) {
+  static long start = 0;
+  static bool reading = false;
+  if (reading) {
+    sonicDist = (TCNT5 - start) * 0.034 / 2;
+    reading = false;
+  }
+  else {
+    start = TCNT5;
+    reading = true;
+  }
+}*/
+
 /*
  * Setup and start codes for serial communications
  * 
  */
+
 // Set up the serial connection. For now we are using 
 // Arduino Wiring, you will replace this later
 // with bare-metal code.
@@ -364,7 +385,7 @@ void clearCounters()
   reverseDist=0; 
 }
 
-// Clears one particular counter
+// Clears one particular counter 
 void clearOneCounter(int which)
 {
   //can be modified
@@ -377,6 +398,19 @@ void initializeState()
   clearCounters();
 }
 
+
+void ultrasonic() {
+  DDRC |= ULTRASONIC_TRIG;
+  delayMicroseconds(10);
+  DDRC &= ~ULTRASONIC_TRIG;
+  //for (int i = 0; i < 100; i++) dbprintf("pin 37 %d", PINC & ULTRASONIC_ECHO);
+  long duration = pulseIn(21, HIGH);
+  int dist = duration * 0.034 / 2;
+  if (dist == 0) dist = 1000;
+    dbprintf("Approaching wall: %d", dist);
+  
+}
+
 void handleCommand(TPacket *command)
 {
   switch(command->command)
@@ -385,6 +419,7 @@ void handleCommand(TPacket *command)
     case COMMAND_FORWARD:
         sendOK();
         forward((double) command->params[0], (float) command->params[1]);
+        //move_forward(); 
         break;
 
     case COMMAND_REVERSE:
@@ -402,6 +437,28 @@ void handleCommand(TPacket *command)
         right((double) command->params[0], (float) command->params[1]);
         break;
 
+    case COMMAND_OPEN:
+        sendOK();
+        openservo();
+        break;
+
+    case COMMAND_CLOSE:
+        sendOK();
+        closeservo();
+        break;
+
+    case COMMAND_COLOUR:
+        sendOK();
+        readColour();
+        break;
+
+    case COMMAND_DELIVER:
+        sendOK();
+        dispense();
+        break;
+    case COMMAND_SONIC:
+        sendOK();
+        ultrasonic();
     case COMMAND_STOP:
         sendOK();
         stop();
@@ -409,6 +466,7 @@ void handleCommand(TPacket *command)
 
     case COMMAND_GET_STATS:
         sendStatus();
+        sendOK();
         break;
 
     case COMMAND_CLEAR_STATS:
@@ -458,6 +516,19 @@ void waitForHello()
   } // !exit
 }
 
+
+void setupUltrasonic() {
+  
+  DDRC |= ULTRASONIC_TRIG; // Set trig pin to output
+  DDRH &= ~ULTRASONIC_ECHO; // Set echo pin to input
+  PORTC &= ~ULTRASONIC_TRIG; // Clear trig pin
+
+  /*EICRA |= 0b01;
+  EIMSK |= 0b01;*/
+  
+}
+
+
 void setup() {
   // put your setup code here, to run once:
 
@@ -467,6 +538,10 @@ void setup() {
   startSerial();
   enablePullups();
   initializeState();
+  initializeColourSensor();
+  setupservo();
+  setupUltrasonic();
+  setupMotor();
   sei();
 }
 
@@ -516,8 +591,13 @@ void loop() {
       if(result == PACKET_CHECKSUM_BAD)
       {
         sendBadChecksum();
-      } 
+      }
 
+   /*if (sonicDist != 0) {
+    dbprintf("Dist: %li", sonicDist);
+    sonicDist = 0;
+   }*/
+      
    if(deltaDist >0) {
      if (dir == FORWARD) {
       if (forwardDist > newDist) {
@@ -526,8 +606,7 @@ void loop() {
         stop();
       }
      }
-   }
-   else if(deltaDist >0) {
+   
      if (dir == BACKWARD) {
       if (reverseDist > newDist) {
         deltaDist = 0;
@@ -538,6 +617,7 @@ void loop() {
    } 
 
    if (deltaTicks > 0) {
+    //dbprintf("delta %i   target %i", deltaTicks, targetTicks);
     if (dir == LEFT) {
       if (leftReverseTicksTurns >= targetTicks) {
         deltaTicks = 0;
@@ -545,9 +625,9 @@ void loop() {
         stop();
       }
     } else if (dir == RIGHT) {
-      if (rightReverseTicksTurns >= targetTicks) {
+      if (leftForwardTicksTurns >= targetTicks) {
         deltaTicks = 0;
-        targetTicks = 0;
+        targetTicks = 0; 
         stop();
       }
     } /*else if (dir == STOP) {
