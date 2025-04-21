@@ -44,7 +44,8 @@ typedef enum
   COMMAND_OPEN = 7,
   COMMAND_CLOSE = 8,
   COMMAND_COLOUR = 9,
-  COMMAND_DELIVER = 10
+  COMMAND_DELIVER = 10,
+  COMMAND_SONIC = 11
 } TCommandType;
 
 typedef enum 

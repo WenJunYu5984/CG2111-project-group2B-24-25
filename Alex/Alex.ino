@@ -1,10 +1,10 @@
 
-
 #include <serialize.h>
 
 #include "packet.h"
 #include "constants.h"
 #include <stdarg.h>
+
 
 /*
  * Alex's configuration constants
@@ -25,14 +25,14 @@ volatile TDirection dir;
 #define ALEX_LENGTH 25.5
 #define ALEX_BREADTH 15.8
 
-#define SERVO1 (1 << 0)
-#define SERVO2 (1 << 1)
-
-#define DELIVER_1 (1 << 0)
-#define DELIVER_2 (1 << 1)
+#define ULTRASONIC_TRIG (1 << 1)
+#define ULTRASONIC_ECHO (1 << PD0)
 
 float alexDiagonal = 29.998;
 float alexCirc = 94.242;
+
+bool ultraSensing = false;
+volatile long sonicDist = 0;
 
 // Store the ticks from Alex's left and
 // right encoders.
@@ -86,7 +86,7 @@ void right(float ang, float speed) {
   }
   targetTicks = rightReverseTicksTurns + deltaTicks;
   
-  cw(ang,speed);
+  cw(ang,100);
 }
 
 /*
@@ -302,11 +302,12 @@ ISR(INT3_vect) {
  * Setup and start codes for serial communications
  * 
  */
+
 // Set up the serial connection. For now we are using 
 // Arduino Wiring, you will replace this later
 // with bare-metal code.
 void setupSerial()
-{
+{ 
   // To replace later with bare-metal.
   Serial.begin(9600);
   // Change Serial to Serial2/Serial3/Serial4 in later labs when using the other UARTs
@@ -371,12 +372,6 @@ void clearCounters()
   reverseDist=0; 
 }
 
-// Clears one particular counter 
-void clearOneCounter(int which)
-{
-  //can be modified
-  clearCounters();
-}
 // Intialize Alex's internal states
 
 void initializeState()
@@ -384,22 +379,17 @@ void initializeState()
   clearCounters();
 }
 
-void openservo() {
-  OCR5A = 2000;
-  OCR5B = 1000;
-}
 
-void closeservo() {
-  OCR5A = 900;
-  OCR5B = 2000;
-}
-
-void deliver() {
-  //delay(10);
-  //PORTA &= ~DELIVER_2;
-  move(100, DEPLOY);
-  delay(150);
-  move(0, STOP);
+void ultrasonic() {
+  DDRC |= ULTRASONIC_TRIG;
+  delayMicroseconds(10);
+  DDRC &= ~ULTRASONIC_TRIG;
+  //for (int i = 0; i < 100; i++) dbprintf("pin 37 %d", PINC & ULTRASONIC_ECHO);
+  long duration = pulseIn(21, HIGH);
+  int dist = duration * 0.034 / 2;
+  if (dist == 0) dist = 1000;
+    dbprintf("Approaching wall: %d", dist);
+  
 }
 
 void handleCommand(TPacket *command)
@@ -409,7 +399,8 @@ void handleCommand(TPacket *command)
     // For movement commands, param[0] = distance, param[1] = speed.
     case COMMAND_FORWARD:
         sendOK();
-        forward((double) command->params[0], (float) command->params[1]); 
+        forward((double) command->params[0], (float) command->params[1]);
+        //move_forward(); 
         break;
 
     case COMMAND_REVERSE:
@@ -444,9 +435,11 @@ void handleCommand(TPacket *command)
 
     case COMMAND_DELIVER:
         sendOK();
-        deliver();
+        dispense();
         break;
-        
+    case COMMAND_SONIC:
+        sendOK();
+        ultrasonic();
     case COMMAND_STOP:
         sendOK();
         stop();
@@ -459,7 +452,7 @@ void handleCommand(TPacket *command)
 
     case COMMAND_CLEAR_STATS:
         sendOK();
-        clearOneCounter(command->params[0]);
+        clearCounters();
         break;
         
     default:
@@ -504,22 +497,13 @@ void waitForHello()
   } // !exit
 }
 
-void setupservo() {
-  // set servo pins to output 
-  DDRL |= (1 << PL3) | (1 << PL4);
 
-  //setup pwm
-  TCCR5A = 0b10100010;
-  TCNT5 = 0;
-  TCCR5B = 0b00010010;
-  ICR5 = 40000;
-  OCR5A = 2000;
-  OCR5B = 1000;
-}
-
-void setupDelivery() {
-  DDRA |= DELIVER_1 | DELIVER_2;
-  PORTA &= (~DELIVER_1) & (~DELIVER_2);
+void setupUltrasonic() {
+  
+  DDRC |= ULTRASONIC_TRIG; // Set trig pin to output
+  DDRH &= ~ULTRASONIC_ECHO; // Set echo pin to input
+  PORTC &= ~ULTRASONIC_TRIG; // Clear trig pin
+  
 }
 
 
@@ -534,7 +518,8 @@ void setup() {
   initializeState();
   initializeColourSensor();
   setupservo();
-  setupDelivery();
+  setupUltrasonic();
+  //setupMotor();
   sei();
 }
 
@@ -561,12 +546,6 @@ void handlePacket(TPacket *packet)
 }
 
 void loop() {
-// Uncomment the code below for Step 2 of Activity 3 in Week 8 Studio 2
-
- //forward(0, 50);
-
-// Uncomment the code below for Week 9 Studio 2
-
 
  // put your main code here, to run repeatedly:
   TPacket recvPacket; // This holds commands from the Pi
@@ -584,8 +563,8 @@ void loop() {
       if(result == PACKET_CHECKSUM_BAD)
       {
         sendBadChecksum();
-      } 
-
+      }
+      
    if(deltaDist >0) {
      if (dir == FORWARD) {
       if (forwardDist > newDist) {
@@ -605,7 +584,7 @@ void loop() {
    } 
 
    if (deltaTicks > 0) {
-    dbprintf("delta %i   target %i", deltaTicks, targetTicks);
+    //dbprintf("delta %i   target %i", deltaTicks, targetTicks);
     if (dir == LEFT) {
       if (leftReverseTicksTurns >= targetTicks) {
         deltaTicks = 0;
@@ -613,16 +592,12 @@ void loop() {
         stop();
       }
     } else if (dir == RIGHT) {
-      if (rightReverseTicksTurns >= targetTicks) {
+      if (leftForwardTicksTurns >= targetTicks) {
         deltaTicks = 0;
         targetTicks = 0; 
         stop();
       }
-    } /*else if (dir == STOP) {
-      deltaTicks = 0;
-      targetTicks = 0;
-      stop();
-    }*/
+    } 
    }
       
 }
