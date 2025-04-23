@@ -2,14 +2,14 @@
 #include "packet.h"
 
 // Defining Ports used for the Colour Sensor (they are not all the same Port Data Register)
-#define COLOUR_S0 (1 << 2) // Port B
-#define COLOUR_S1 (1 << 1) // Port B
-#define COLOUR_S2 (1 << 4) // Port A
-#define COLOUR_S3 (1 << 6) // Port A
+#define COLOUR_S0 (1 << PB2) // Port B
+#define COLOUR_S1 (1 << PB1) // Port B
+#define COLOUR_S2 (1 << PA4) // Port A
+#define COLOUR_S3 (1 << PA6) // Port A
 #define COLOUR_READER (1 << PD1) // Port D
-#define COLOUR_ON (1 << 7) // Port A
-#define COLOUR_LED (1 << 3) // Port B
-#define COLOUR_GROUND (1 << 5) // Port A
+#define COLOUR_ON (1 << PA7) // Port A
+#define COLOUR_LED (1 << PB3) // Port B
+#define COLOUR_GROUND (1 << PA5) // Port A
 
 void initializeColourSensor() {
   // Set the reading pins to be input and the S pins and power source to be output pins
@@ -64,7 +64,7 @@ void setColour(Tcolour colour) {
 void readColour() {
   // Turn on the LED
   PORTB |= COLOUR_LED;
-  //delay(10);
+  delay(10);
   setColour(WHITE);
   PORTA |= COLOUR_S2;
   PORTA &= ~COLOUR_S3;
@@ -86,12 +86,7 @@ void readColour() {
   dbprintf("Green raw: %ld", rgbArr[0]);
   dbprintf("Blue raw: %ld", rgbArr[1]);
   dbprintf("Red raw: %ld",rgbArr[2]);
-  /*dbprintf("Green / Blue (in %%): %ld", rgbArr[0] * 109 / rgbArr[1]);
-  dbprintf("Green / Red (in %%): %ld", rgbArr[0] * 100 / rgbArr[2]);
-  dbprintf("Blue / Green (in %%): %ld",rgbArr[1] * 100 / rgbArr[0]);
-  dbprintf("Blue / Red (in %%): %ld", rgbArr[1] * 100 / rgbArr[2]);
-  dbprintf("Red / Green (in %%): %ld", rgbArr[2] * 100 / rgbArr[0]);
-  dbprintf("Red / Blue (in %%): %ld",rgbArr[2] * 100 / rgbArr[1]);*/
+  
   // Turn off colour sensor
   PORTB &= ~(COLOUR_LED);
   

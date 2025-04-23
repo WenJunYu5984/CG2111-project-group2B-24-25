@@ -301,59 +301,58 @@ ISR(INT3_vect) {
 /*
  * Setup and start codes for serial communications
  * 
+ * Alex's setup and run codes
+ * 
  */
 
-// Set up the serial connection. For now we are using 
-// Arduino Wiring, you will replace this later
-// with bare-metal code.
+void setBaud(unsigned long baudRate) {
+  unsigned int b;
+  b = (unsigned int) round(F_CPU / (16.0 * baudRate)) -1;
+  UBRR0H = (unsigned char) (b >> 8);
+  UBRR0L = (unsigned char) b;
+}
+
 void setupSerial()
-{ 
-  // To replace later with bare-metal.
-  Serial.begin(9600);
-  // Change Serial to Serial2/Serial3/Serial4 in later labs when using the other UARTs
+{
+  PRR0 &= ~(1 << PRUSART0); // make sure UART power is on 
+  setBaud(9600); // set baud rate  
+  UCSR0C = 0b00000110; // using Async UART, 8N1
+  UCSR0A = 0; // clear while setting up
+  // thsese replace Serial.begin(9600)
 }
 
 // Start the serial connection. For now we are using
-// Arduino wiring and this function is empty. We will
-// replace this later with bare-metal code.
+// Arduino wiring and this function is empty.
 
 void startSerial()
 {
-  // Empty for now. To be replaced with bare-metal code
-  // later on.
-  
+  UCSR0B = 0b00011000; // enable RX and TX (disable bits 6 and 7 - TX and RX interrupts)
 }
 
 // Read the serial port. Returns the read character in
 // ch if available. Also returns TRUE if ch is valid. 
-// This will be replaced later with bare-metal code.
 
 int readSerial(char *buffer)
 {
-
   int count=0;
-
-  // Change Serial to Serial2/Serial3/Serial4 in later labs when using other UARTs
-
-  while(Serial.available())
-    buffer[count++] = Serial.read();
-
+  // poll RXC0 bit in UCSR0A
+  while((UCSR0A & (1 << RXC0))) {
+    // read data from buffer 
+    buffer[count++] = UDR0;
+  }
   return count;
 }
 
-// Write to the serial port. Replaced later with
-// bare-metal code
+// Write to the serial port
 
 void writeSerial(const char *buffer, int len)
 {
-  Serial.write(buffer, len);
-  // Change Serial to Serial2/Serial3/Serial4 in later labs when using other UARTs
+  for (int i = 0; i < len; i++) {
+    // poll UDRE bit in UCSR0 - if 1 means UDR0 is empty - can write to it 
+    while (!(UCSR0A & (1 << UDRE0)));
+    UDR0 = buffer[i]; // write each byte of the buffer
+  }
 }
-
-/*
- * Alex's setup and run codes
- * 
- */
 
 // Clears all our counters
 void clearCounters()

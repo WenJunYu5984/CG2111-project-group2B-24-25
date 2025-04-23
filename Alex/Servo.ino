@@ -10,6 +10,7 @@ int claw_PWM;
 int dispenser_PWM;
 
 ISR(TIMER2_COMPA_vect) {
+  // Link CTC clock to generate PWM for left claw and the dispenser
   servoTimerTick++;
   if (servoTimerTick >= claw_PWM) {
       PORTB &= ~(1 << PB4);
@@ -46,13 +47,14 @@ void setupservo() {
   DDRB |= LEFT_CLAW;
   DDRH |= DISPENSER;
   
-  //setup pwm
+  //setup pwm for right claw
   TCCR5A = 0b00100010;
   TCNT5 = 0;
   TCCR5B = 0b00010010;
   ICR5 = 40000;
   OCR5B = 1500;
 
+  // set up CTC timer for dispenser and left claw
   TCCR2A = 0b00000010;
   TCCR2B = 0b00000100;
   TIMSK2 = 0b10;
